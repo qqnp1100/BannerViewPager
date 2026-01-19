@@ -79,6 +79,8 @@ public class BannerViewPager<T> extends RelativeLayout implements LifecycleObser
 
   private boolean isLooping;
 
+  private int scrollState = ViewPager2.SCROLL_STATE_IDLE;
+
   private IIndicator mIndicatorView;
 
   private RelativeLayout mIndicatorLayout;
@@ -266,6 +268,7 @@ public class BannerViewPager<T> extends RelativeLayout implements LifecycleObser
   }
 
   private void pageScrollStateChanged(int state) {
+    scrollState = state;
     if (mIndicatorView != null) {
       mIndicatorView.onPageScrollStateChanged(state);
     }
@@ -307,8 +310,25 @@ public class BannerViewPager<T> extends RelativeLayout implements LifecycleObser
 
   private void handlePosition() {
     if (mBannerPagerAdapter != null && mBannerPagerAdapter.getListSize() > 1 && isAutoPlay()) {
-      mViewPager.setCurrentItem(mViewPager.getCurrentItem() + 1,
-          mBannerManager.getBannerOptions().isAutoScrollSmoothly());
+      // 只有在ViewPager2已经附加到窗口且处于空闲状态时才执行滚动
+      if (isAttachedToWindow() && scrollState == ViewPager2.SCROLL_STATE_IDLE) {
+        try {
+          int currentItem = mViewPager.getCurrentItem();
+          int nextItem = currentItem + 1;
+          // 确保nextItem是有效的正数
+          if (nextItem >= 0) {
+            mViewPager.setCurrentItem(nextItem,
+                mBannerManager.getBannerOptions().isAutoScrollSmoothly());
+          }
+        } catch (IllegalArgumentException e) {
+          // 捕获负偏移量异常（"Page can only be offset by a positive amount"），
+          // 这种情况通常发生在ViewPager2内部状态不一致时
+          // 延迟重试，避免崩溃
+        } catch (Exception e) {
+          // 捕获其他可能的异常，避免崩溃
+        }
+      }
+      // 无论是否成功执行滚动，都继续安排下一次轮播
       mHandler.postDelayed(mRunnable, getInterval());
     }
   }
